@@ -22,5 +22,7 @@ def compute(
 def display(pdf_vs_time: np.ndarray[float, Any]) -> None:
     for row in pdf_vs_time:
         plt.plot(X, row)
+    plt.xlabel(r"$x$")
+    plt.ylabel(r"$P(x)$")
     plt.savefig("problem_d.png")
     plt.clf()

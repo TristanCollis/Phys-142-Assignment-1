@@ -45,7 +45,8 @@ def display(
         (total_energy, "E"),
     ):
         plt.plot(t_axis, quantity, label=label)
-
+    plt.xlabel(r"$t$")
+    plt.ylabel("Energy")
     plt.legend()
     plt.savefig("problem_c.png")
     plt.clf()
