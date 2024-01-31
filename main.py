@@ -1,13 +1,14 @@
 from matplotlib import pyplot as plt
 import numpy as np
-from typing import Any
+from typing import Any, Callable
 
 from animate import animate
 
 
 PERIOD = 2 * np.pi
 EPSILON = PERIOD/128
-T_AXIS = np.linspace(0, PERIOD, 128)
+TIME_STEPS = 128
+T = np.linspace(0, PERIOD, TIME_STEPS)
 
 ALPHA = 2
 
@@ -17,7 +18,7 @@ X_MIN = -4
 X_MAX = 4
 PARTITIONS = 600
 DX = (X_MAX - X_MIN) / PARTITIONS
-X_AXIS = np.linspace(X_MIN, X_MAX, PARTITIONS + 1)[..., np.newaxis]
+X = np.linspace(X_MIN, X_MAX, PARTITIONS + 1)[..., np.newaxis]
 
 
 def psi_initial(x: np.ndarray[float, Any]) -> np.ndarray[complex, Any]:
@@ -25,11 +26,11 @@ def psi_initial(x: np.ndarray[float, Any]) -> np.ndarray[complex, Any]:
 
 
 def propagator_HO(t_b: float, t_a: float) -> np.ndarray[complex, Any]:
-    x_a = X_AXIS
-    x_b = X_AXIS
+    x_a = X
+    x_b = X
 
     return (
-        (2j * np.pi  * np.sin(t_b - t_a)) ** -0.5
+        (2j * np.pi * np.sin(t_b - t_a)) ** -0.5
         * np.exp(
             ((x_a ** 2 + x_b.T ** 2) * np.cos(t_b - t_a) - 2 * (x_a @ x_b.T))
             / (-2j * np.sin(t_b - t_a))
@@ -37,9 +38,8 @@ def propagator_HO(t_b: float, t_a: float) -> np.ndarray[complex, Any]:
     )
 
 
-def expectation_value(operator: np.ndarray[float, Any] | float, psi: np.ndarray[complex, Any]) -> float:
-    psi_pdf = np.abs(psi) ** 2
-    return np.sum(operator * psi_pdf) * DX  # type: ignore
+def integrate(integrand: np.ndarray[complex, Any], dx: float) -> complex:
+    return np.sum(integrand) * dx
 
 
 def problem_a(time_steps: int) -> np.ndarray[complex, Any]:
@@ -54,27 +54,30 @@ def problem_b(psi: np.ndarray[complex, Any], K: np.ndarray[complex, Any], steps:
     psi_current = psi
 
     for i in range(steps):
-        result[i] = expectation_value(X_AXIS, psi)
+        result[i] = integrate(X * np.abs(psi_current) ** 2, DX)
         psi_current = K @ psi_current * DX
 
     return result
 
 
 def problem_c(psi: np.ndarray[complex, Any], K: np.ndarray[complex, Any], steps: int) -> tuple[np.ndarray[float, Any], np.ndarray[float, Any], np.ndarray[float, Any]]:
-    potential = np.zeros(steps)
-    kinetic = np.zeros(steps)
-    energy = np.zeros(steps)
+    potential_energy = np.zeros(steps)
+    kinetic_energy = np.zeros(steps)
+    total_energy = np.zeros(steps)
     psi_current = psi
 
     for i in range(steps):
-        potential[i] = expectation_value(0.5 * X_AXIS**2, psi_current)
-        kinetic[i] = expectation_value(0.5, psi_current)
+        potential_energy[i] = integrate(0.5 * X ** 2 * np.abs(psi_current) ** 2, DX)
+
+        dpsi_dx = (psi_current[2:] - psi_current[:-2]) / (2 * DX)
+        dpsi_dx2 = np.abs(dpsi_dx) ** 2
+        kinetic_energy[i] = integrate(0.5 * dpsi_dx2, DX)
 
         psi_current = K @ psi_current * DX
 
-    energy = potential + kinetic
+    total_energy = potential_energy + kinetic_energy
 
-    return potential, kinetic, energy
+    return potential_energy, kinetic_energy, total_energy
 
 
 def problem_d(psi: np.ndarray[complex, Any], K: np.ndarray[complex, Any], steps: int) -> np.ndarray[float, Any]:
@@ -90,46 +93,54 @@ def problem_d(psi: np.ndarray[complex, Any], K: np.ndarray[complex, Any], steps:
 
 def problem_e(psi: np.ndarray[complex, Any], K: np.ndarray[complex, Any], steps: int) -> None:
     pdf_vs_time = problem_d(psi, K, steps)
-    animate(pdf_vs_time, X_AXIS)
+    animate(pdf_vs_time, X)
+
 
 def main() -> None:
-    psi_0 = psi_initial(X_AXIS)
+    psi_0 = psi_initial(X)
 
-    K_8eps = problem_a(8)
+    problem_a_steps = 8
+    K_8eps = problem_a(problem_a_steps)
 
     print("K_8eps:")
     print(K_8eps)
 
-    x_expectation = problem_b(psi_0, K_8eps, 16)
+    problem_b_steps = 16
+    x_expectation = problem_b(psi_0, K_8eps, problem_b_steps)
 
-    plt.plot(np.linspace(0, PERIOD, 16), x_expectation)
+    plt.plot(np.linspace(0, PERIOD, problem_b_steps), x_expectation)
     plt.xlabel("Time")
     plt.ylabel("<x>")
     plt.savefig("problem_b.png")
     plt.clf()
 
-    potential, kinetic, energy = problem_c(psi_0, K_8eps, 16)
+    problem_c_steps = 16
+    potential_energy, kinetic_energy, total_energy = problem_c(psi_0, K_8eps, problem_c_steps)
 
-    plt.plot(T_AXIS[::8], potential, label="V")
-    plt.plot(T_AXIS[::8], kinetic, label="K")
-    plt.plot(T_AXIS[::8], energy, label="E")
+    stride = int(TIME_STEPS / problem_c_steps)
+    t_axis = T[::stride]
+
+    for quantity, label in (
+        (potential_energy, "V"),
+        (kinetic_energy, "K"),
+        (total_energy, "E"),
+    ):
+        plt.plot(t_axis, quantity, label=label)
+
     plt.legend()
     plt.savefig("problem_c.png")
     plt.clf()
-    
 
-    pdf_vs_time = problem_d(psi_0, K_8eps, 8)
+    problem_d_steps = 8
+    pdf_vs_time = problem_d(psi_0, K_8eps, problem_d_steps)
 
     for row in pdf_vs_time:
-        plt.plot(X_AXIS, row)
+        plt.plot(X, row)
     plt.savefig("problem_d.png")
     plt.clf()
 
-    problem_e(psi_0, propagator_HO(EPSILON, 0), 128)
-
-
-
-
+    problem_e_steps = TIME_STEPS
+    problem_e(psi_0, propagator_HO(EPSILON, 0), problem_e_steps)
 
 
 if __name__ == "__main__":
