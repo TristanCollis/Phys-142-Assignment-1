@@ -21,7 +21,10 @@ X_AXIS = np.linspace(X_MIN, X_MAX, PARTITIONS + 1)[..., np.newaxis]
 
 
 def psi_initial(x: np.ndarray[float, Any]) -> np.ndarray[complex, Any]:
-    return (ALPHA / np.pi) ** 0.25 * np.exp(-ALPHA / 2 * (x - X_INITIAL)**2)
+    return (
+        (ALPHA / np.pi) ** (1/4) 
+        * np.exp(-ALPHA / 2 * (x - X_INITIAL)**2)
+    )
 
 
 def propagator_HO(t_b: float, t_a: float) -> np.ndarray[complex, Any]:
@@ -38,8 +41,8 @@ def propagator_HO(t_b: float, t_a: float) -> np.ndarray[complex, Any]:
 
 
 def expectation_value(operator: np.ndarray[float, Any] | float, psi: np.ndarray[complex, Any]) -> float:
-    psi_pdf = np.abs(psi) ** 2
-    return np.sum(operator * psi_pdf) * DX  # type: ignore
+    psi_pdf = np.abs(psi * np.conjugate(psi)) ** 2
+    return np.sum(operator * psi_pdf * DX)  # type: ignore
 
 
 def problem_a(time_steps: int) -> np.ndarray[complex, Any]:
@@ -55,7 +58,7 @@ def problem_b(psi: np.ndarray[complex, Any], K: np.ndarray[complex, Any], steps:
 
     for i in range(steps):
         result[i] = expectation_value(X_AXIS, psi)
-        psi_current = K @ psi_current * DX
+        psi_current = (K @ psi_current) * DX
 
     return result
 
@@ -103,8 +106,9 @@ def main() -> None:
     x_expectation = problem_b(psi_0, K_8eps, 16)
 
     plt.plot(np.linspace(0, PERIOD, 16), x_expectation)
-    plt.xlabel("Time")
-    plt.ylabel("<x>")
+    plt.xlabel(r"$t$")
+    plt.ylabel(r"$\langle x \rangle$")
+    plt.show()
     plt.savefig("problem_b.png")
     plt.clf()
 
